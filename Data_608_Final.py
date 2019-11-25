@@ -5,15 +5,27 @@ Created on Sun Nov 24 11:50:55 2019
 @author: ASchwenker
 """
 from plotly.offline import plot
-
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
 import plotly.graph_objects as go
 import pandas as pd
-
+from urllib.request import urlopen
+import json
+with urlopen('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json') as response:
+    counties = json.load(response)
+All_SChool_URL = 'https://data.cityofnewyork.us/resource/9ck8-hj3u.json'
 mapbox_access_token = 'pk.eyJ1IjoiYXNjaHdlbmtlcjY2OTAiLCJhIjoiY2szZDhybTFtMHVoMTNjcGk4MnozZDlmZyJ9.5dVGGTKgF6B8O9YlWjuXTw'
-GEoJsonURL = pd.read_json('C:/Users/aschwenker/Documents/MA/Data-608-Final/Data/School Districts.geojson')
-print(GEoJsonURL)
 
-df = pd.read_csv('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/New%20folder%20(2)/Safe_Routes_to_Schools_-_Priority_Schools.csv')
+
+
+import plotly.graph_objects as go
+
+fig = go.Figure(go.Choroplethmapbox(geojson=counties))
+fig.update_layout(mapbox_style="carto-positron",
+                  mapbox_zoom=3, mapbox_center = {"lat": 37.0902, "lon": -95.7129})
+plot(fig)
+df = pd.read_csv('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Safe_Routes_to_Schools_-_Priority_Schools.csv')
 site_lat = df.Latitude
 print(site_lat)
 site_lon = df.Longitude
@@ -40,22 +52,23 @@ fig.add_trace(go.Scattermapbox(
         marker=go.scattermapbox.Marker(
             size=8,
             color='rgb(242, 177, 172)',
-            opacity=0.7
+            opacity=0.9
         ),
         text=locations_name
     ))
 fig.update_layout(
+        title='Safe Route Schools',
+        autosize=True,
+        hovermode='closest',
+        showlegend=False,
 mapbox = {
         'style': "stamen-terrain",
         'center': { 'lon': -74, 'lat': 40.75},
         'zoom': 9.25, 'layers': [{
-            'source': GEoJsonURL,
+            'source': counties,
             'type': "fill", 'below': "traces", 'color': "royalblue"}]},
     margin = {'l':0, 'r':0, 'b':0, 't':0})
        
-
-
-
 
 plot(fig)
 
