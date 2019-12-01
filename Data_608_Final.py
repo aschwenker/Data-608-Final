@@ -12,19 +12,13 @@ import plotly.graph_objects as go
 import pandas as pd
 from urllib.request import urlopen
 import json
+import plotly.graph_objects as go
+
 with urlopen('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json') as response:
     counties = json.load(response)
 All_SChool_URL = 'https://data.cityofnewyork.us/resource/9ck8-hj3u.json'
 mapbox_access_token = 'pk.eyJ1IjoiYXNjaHdlbmtlcjY2OTAiLCJhIjoiY2szZDhybTFtMHVoMTNjcGk4MnozZDlmZyJ9.5dVGGTKgF6B8O9YlWjuXTw'
 
-
-
-import plotly.graph_objects as go
-
-fig = go.Figure(go.Choroplethmapbox(geojson=counties))
-fig.update_layout(mapbox_style="carto-positron",
-                  mapbox_zoom=3, mapbox_center = {"lat": 37.0902, "lon": -95.7129})
-plot(fig)
 df = pd.read_csv('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Safe_Routes_to_Schools_-_Priority_Schools.csv')
 site_lat = df.Latitude
 print(site_lat)
