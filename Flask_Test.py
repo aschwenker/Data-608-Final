@@ -27,20 +27,23 @@ boroughs['features'] = features_list
 for item in features_list:
     print(item['properties']['boro_code'],item['properties']['boro_name'])
 df = pd.read_csv('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Safe_Routes_to_Schools_-_Priority_Schools.csv')
+accidents = pd.read_csv('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/accidents_2018_2019.csv')
+print(list(accidents))
 # Create the dictionary 
-event_dictionary ={'Bronx' : '2', 'Staten Island' :'5', 'Brooklyn' : '3','Queens':'4','Manhattan':'5'} 
+event_dictionary ={'Bronx' : '2', 'Staten Island' :'5', 'Brooklyn' : '3','Queens':'4','Manhattan':'1'} 
+accidents_id_dict ={'BRONX' : '2', 'STATEN ISLAND' :'5', 'BROOKLYN' : '3','QUEENS':'4','MANHATTAN':'1'} 
 
 # Add a new column named 'Price' 
 df['id'] = df['Borough'].map(event_dictionary) 
-
-# Print the DataFrame 
-print(df) 
-
+accidents['id']=accidents['BOROUGH'].map(accidents_id_dict)
+accident_counts = accidents.groupby('id').count()['COLLISION_ID']
+accident_counts.to_frame()
+accident_counts = accident_counts.reset_index()
+accident_counts.rename(columns = {'COLLISION_ID':'Accident_Counts'}, inplace = True) 
+print(accident_counts)
 site_lat = df.Latitude
-print(site_lat)
 site_lon = df.Longitude
 locations_name = df['School Name / ID']
-print(locations_name)
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
@@ -72,8 +75,8 @@ counts.to_frame()
 counts = counts.reset_index()
 counts.rename(columns = {'School Name / ID':'counted'}, inplace = True) 
 
-choro_map_data = [go.Choroplethmapbox(geojson=boroughs, locations=counts.id, z=counts.counted,
-                                    colorscale="Viridis", zmin=0, zmax=46,
+choro_map_data = [go.Choroplethmapbox(geojson=boroughs, locations=accident_counts.id, z=accident_counts.Accident_Counts,
+                                    colorscale="Viridis", zmin=9000, zmax=88000,
                                     marker_opacity=0.5, marker_line_width=0)]
 choro_map_layout = go.Layout(mapbox = dict(
         style = "carto-positron",
