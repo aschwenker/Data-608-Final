@@ -13,8 +13,12 @@ import plotly.graph_objects as go
 import pandas as pd
 from urllib.request import urlopen
 import json
+import geopandas
+import geopandas.tools
+from shapely.geometry import Point
 with urlopen('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json') as response:
     counties = json.load(response)
+districts=geopandas.read_file('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json')
     
 Borough_URL = 'https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Borough%20Boundaries_geojson.JSON'
 with urlopen(Borough_URL) as response:
@@ -32,8 +36,30 @@ print(list(accidents))
 # Create the dictionary 
 event_dictionary ={'Bronx' : '2', 'Staten Island' :'5', 'Brooklyn' : '3','Queens':'4','Manhattan':'1'} 
 accidents_id_dict ={'BRONX' : '2', 'STATEN ISLAND' :'5', 'BROOKLYN' : '3','QUEENS':'4','MANHATTAN':'1'} 
+df["geometry"] = df.apply(lambda row: Point(row["Longitude"], row["Latitude"]), axis=1)
+del(df["Latitude"], df["Longitude"])
 
-# Add a new column named 'Price' 
+points = geopandas.GeoDataFrame(df, geometry="geometry")
+
+points.crs = districts.crs
+result = geopandas.tools.sjoin(points, districts, how="left")
+result_counts = result.groupby('school_dist').count()['School Name / ID']
+ 
+result_counts.to_frame()
+result_counts = result_counts.reset_index()
+result_counts.rename(columns = {'COLLISION_ID':'result_Counts'}, inplace = True)
+
+school_density_data = [go.Choroplethmapbox(geojson=boroughs, locations=result_counts.school_dist, z=result_counts.result_Counts,
+                                    colorscale="Viridis", zmin=9000, zmax=88000,
+                                    marker_opacity=0.5, marker_line_width=0)]
+school_density_layout = go.Layout(mapbox = dict(
+        style = "carto-positron",
+        center = dict(lat= 40.75, lon= -74),
+        zoom=9),
+    margin = dict(l=0, r=0, b=0, t=0))
+school_density = dict(data = school_density_data,layout = school_density_layout)
+
+
 df['id'] = df['Borough'].map(event_dictionary) 
 accidents['id']=accidents['BOROUGH'].map(accidents_id_dict)
 accident_counts = accidents.groupby('id').count()['COLLISION_ID']
@@ -52,12 +78,13 @@ data = [go.Scattermapbox(lat=df['Latitude'], lon=df['Longitude'], mode='markers'
 text=df['School Name / ID'])]
 
 fig_layout = go.Layout(autosize=True, hovermode='closest', mapbox=dict(
-        style= "stamen-terrain",
+        style= "carto-positron",
         center= dict( lon= -74, lat= 40.75),
-        zoom= 9.25,
+        zoom= 9,
         layers=[dict(
             source = counties,
-            type = 'fill',below = 'traces', color =  'pink')]))
+            type = 'fill',below = 'traces', color =  'green', opacity = 0.5)]),
+    margin = dict(l=0, r=0, b=0, t=0))
 fig = dict(data=data, layout=fig_layout)
 
 Borough_URL = 'https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Borough%20Boundaries_geojson.JSON'
@@ -81,7 +108,8 @@ choro_map_data = [go.Choroplethmapbox(geojson=boroughs, locations=accident_count
 choro_map_layout = go.Layout(mapbox = dict(
         style = "carto-positron",
         center = dict(lat= 40.75, lon= -74),
-        zoom=9.25))
+        zoom=9),
+    margin = dict(l=0, r=0, b=0, t=0))
 choro_map = dict(data = choro_map_data,layout = choro_map_layout)
 
 
@@ -91,6 +119,7 @@ app.layout = html.Div([
         dcc.Tab(label='Safe Route Schools Map', value='tab-1-example'),
         dcc.Tab(label='Distribution of Safe Route Schools By Borough', value='tab-2-example'),
         dcc.Tab(label='Tab 3', value='tab-3-example'),
+        dcc.Tab(label = 'Tab 4', value= 'tab-3-example')
     ]),
     html.Div(id='tabs-content-example')
 ])
@@ -122,6 +151,13 @@ def render_content(tab):
             dcc.Graph(
                 id='choro map',
                 figure = choro_map)
+        ])
+    elif tab == 'tab-4-example':
+        return html.Div([
+            html.H3('Tab 4'),
+            dcc.Graph(
+                id='school density',
+                figure = school_density)
         ])
 
 
