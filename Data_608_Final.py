@@ -14,15 +14,20 @@ from urllib.request import urlopen
 import json
 import plotly.graph_objects as go
 
-with urlopen('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json') as response:
-    counties = json.load(response)
-
+with urlopen('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json') as distresponse:
+    counties = json.load(distresponse)
+print(counties)
 Borough_URL = 'https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Borough%20Boundaries_geojson.JSON'
 with urlopen(Borough_URL) as response:
     boroughs = json.load(response)
 print(boroughs)
 features_list = boroughs['features']
 features_list = [dict(item, **{'id':item['properties']['boro_code']}) for item in features_list]
+
+counties_list = counties['features']
+print(counties_list)
+counties_list = [dict(item, **{'id':item['properties']['school_dist']}) for item in counties_list]
+counties['features']=counties_list
 print(len(features_list))
 boroughs['features'] = features_list
 for item in features_list:
@@ -50,51 +55,12 @@ counts.rename(columns = {'School Name / ID':'counted'}, inplace = True)
 print(list(counts))
 print(counts.counted)
       
-     
-      print(list(counts))
 fig = go.Figure()
 
-fig.add_trace(go.Scattermapbox(
-        lat=site_lat,
-        lon=site_lon,
-        mode='markers',
-        marker=go.scattermapbox.Marker(
-            size=10,
-            color='rgb(255, 0, 0)',
-            opacity=0.7
-        ),
-        text=locations_name
-    ))
-
-fig.add_trace(go.Scattermapbox(
-        lat=site_lat,
-        lon=site_lon,
-        mode='markers',
-        marker=go.scattermapbox.Marker(
-            size=8,
-            color='rgb(242, 177, 172)',
-            opacity=0.9
-        ),
-        text=locations_name
-    ))
-fig.update_layout(
-        title='Safe Route Schools',
-        autosize=True,
-        hovermode='closest',
-        showlegend=False,
-mapbox = {
-        'style': "stamen-terrain",
-        'center': { 'lon': -74, 'lat': 40.75},
-        'zoom': 9.25, 'layers': [{
-            'source': counties,
-            'type': "fill", 'below': "traces", 'color': "royalblue"}]},
-    margin = {'l':0, 'r':0, 'b':0, 't':0})
-       
-
-plot(fig)
 
 
-fig = go.Figure(go.Choroplethmapbox(geojson=boroughs, locations=counts.id, z=counts.counted,
+
+fig = go.Figure(go.Choroplethmapbox(geojson=counties, locations=counts.id, z=counts.counted,
                                     colorscale="Viridis", zmin=0, zmax=46,
                                     marker_opacity=0.5, marker_line_width=0))
 fig.update_layout(mapbox_style="carto-positron",

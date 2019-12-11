@@ -19,7 +19,10 @@ from shapely.geometry import Point
 with urlopen('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json') as response:
     counties = json.load(response)
 districts=geopandas.read_file('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json')
-    
+counties_list = counties['features']
+print(counties_list)
+counties_list = [dict(item, **{'id':item['properties']['school_dist']}) for item in counties_list]
+counties['features']=counties_list    
 Borough_URL = 'https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Borough%20Boundaries_geojson.JSON'
 with urlopen(Borough_URL) as response:
     boroughs = json.load(response)
@@ -32,12 +35,16 @@ for item in features_list:
     print(item['properties']['boro_code'],item['properties']['boro_name'])
 df = pd.read_csv('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Safe_Routes_to_Schools_-_Priority_Schools.csv')
 accidents = pd.read_csv('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/accidents_2018_2019.csv')
+print(len(accidents))
+ped_acc = accidents[(accidents['NUMBER OF PEDESTRIANS INJURED']>0)|(accidents['NUMBER OF PEDESTRIANS KILLED']>0)|(accidents['NUMBER OF CYCLIST INJURED']>0)|(accidents['NUMBER OF CYCLIST KILLED']>0)]
+print(len(ped_acc))
+
 print(list(accidents))
+print(accidents.dtypes)
 # Create the dictionary 
 event_dictionary ={'Bronx' : '2', 'Staten Island' :'5', 'Brooklyn' : '3','Queens':'4','Manhattan':'1'} 
 accidents_id_dict ={'BRONX' : '2', 'STATEN ISLAND' :'5', 'BROOKLYN' : '3','QUEENS':'4','MANHATTAN':'1'} 
 df["geometry"] = df.apply(lambda row: Point(row["Longitude"], row["Latitude"]), axis=1)
-del(df["Latitude"], df["Longitude"])
 
 points = geopandas.GeoDataFrame(df, geometry="geometry")
 
@@ -47,10 +54,10 @@ result_counts = result.groupby('school_dist').count()['School Name / ID']
  
 result_counts.to_frame()
 result_counts = result_counts.reset_index()
-result_counts.rename(columns = {'COLLISION_ID':'result_Counts'}, inplace = True)
-
-school_density_data = [go.Choroplethmapbox(geojson=boroughs, locations=result_counts.school_dist, z=result_counts.result_Counts,
-                                    colorscale="Viridis", zmin=9000, zmax=88000,
+result_counts.rename(columns = {'School Name / ID':'result_Counts'}, inplace = True)
+print((result_counts))
+school_density_data = [go.Choroplethmapbox(geojson=counties, locations=result_counts.school_dist, z=result_counts.result_Counts,
+                                    colorscale="Viridis", zmin=0, zmax=11,
                                     marker_opacity=0.5, marker_line_width=0)]
 school_density_layout = go.Layout(mapbox = dict(
         style = "carto-positron",
@@ -61,14 +68,12 @@ school_density = dict(data = school_density_data,layout = school_density_layout)
 
 
 df['id'] = df['Borough'].map(event_dictionary) 
-accidents['id']=accidents['BOROUGH'].map(accidents_id_dict)
-accident_counts = accidents.groupby('id').count()['COLLISION_ID']
+ped_acc['id']=ped_acc['BOROUGH'].map(accidents_id_dict)
+accident_counts = ped_acc.groupby('id').count()['COLLISION_ID']
 accident_counts.to_frame()
 accident_counts = accident_counts.reset_index()
 accident_counts.rename(columns = {'COLLISION_ID':'Accident_Counts'}, inplace = True) 
 print(accident_counts)
-site_lat = df.Latitude
-site_lon = df.Longitude
 locations_name = df['School Name / ID']
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -101,9 +106,9 @@ counts = df.groupby('id').count()['School Name / ID']
 counts.to_frame()
 counts = counts.reset_index()
 counts.rename(columns = {'School Name / ID':'counted'}, inplace = True) 
-
+print(counts)
 choro_map_data = [go.Choroplethmapbox(geojson=boroughs, locations=accident_counts.id, z=accident_counts.Accident_Counts,
-                                    colorscale="Viridis", zmin=9000, zmax=88000,
+                                    colorscale="Viridis", zmin=400, zmax=7600,
                                     marker_opacity=0.5, marker_line_width=0)]
 choro_map_layout = go.Layout(mapbox = dict(
         style = "carto-positron",
@@ -119,7 +124,7 @@ app.layout = html.Div([
         dcc.Tab(label='Safe Route Schools Map', value='tab-1-example'),
         dcc.Tab(label='Distribution of Safe Route Schools By Borough', value='tab-2-example'),
         dcc.Tab(label='Tab 3', value='tab-3-example'),
-        dcc.Tab(label = 'Tab 4', value= 'tab-3-example')
+        dcc.Tab(label = 'Tab 4', value= 'tab-4-example')
     ]),
     html.Div(id='tabs-content-example')
 ])
@@ -139,7 +144,7 @@ def render_content(tab):
             dcc.Graph(
                 id='graph',
                 figure = {'data': [{
-                        'x': ['Bronx', 'Manhattan','Queens','Staten Island'],
+                        'x': ['Bronx', 'Brooklyn','Manhattan','Queens','Staten Island'],
                         'y': [25, 46, 23,33,8],
                         'type': 'bar'
                     }]
