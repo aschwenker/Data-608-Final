@@ -40,7 +40,8 @@ for item in features_list:
 #get priority schools
 df = pd.read_csv('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Safe_Routes_to_Schools_-_Priority_Schools.csv')
 accidents = pd.read_csv("https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Accidents_ped.csv")
-print(list(accidents))
+print(accidents['CRASH DATE'])
+accidents['CRASH YEAR']=accidents['CRASH DATE'].str[-4:]
 # Create the dictionary 
 event_dictionary ={'Bronx' : '2', 'Staten Island' :'5', 'Brooklyn' : '3','Queens':'4','Manhattan':'1'} 
 accidents_id_dict ={'BRONX' : '2', 'STATEN ISLAND' :'5', 'BROOKLYN' : '3','QUEENS':'4','MANHATTAN':'1'} 
@@ -58,6 +59,21 @@ accident_join_counts.to_frame()
 accident_join_counts = accident_join_counts.reset_index()
 accident_join_counts.rename(columns = {'COLLISION_ID':'Accident_Counts'}, inplace = True)
 print((accident_join_counts))
+acc_fig_layout = go.Layout(autosize=True, hovermode='closest', mapbox=dict(
+        style= "carto-positron",
+        center= dict( lon= -74, lat= 40.75),
+        zoom= 9,
+        layers=[dict(
+            source = counties,
+            type = 'fill',below = 'traces', color =  'green', opacity = 0.5)]),
+    margin = dict(l=0, r=0, b=0, t=0))
+available_indicators = accident_join_counts['school_dist'].unique()
+d = {indicator: accident_join[accident_join['school_dist']==indicator] for indicator in available_indicators}
+data_dict = {indicator: [go.Scattermapbox(lat=d[indicator]['LATITUDE'], lon=d[indicator]['LONGITUDE'], mode='markers', marker=dict(size=10),
+                                                        text=d[indicator]['COLLISION_ID'])] for indicator in available_indicators}
+fig_dict = {indicator: dict(data=data_dict[indicator], layout=acc_fig_layout) for indicator in available_indicators}
+figs=list(fig_dict.values())
+print(type(figs))
 #SCHOOL
 df["geometry"] = df.apply(lambda row: Point(row["Longitude"], row["Latitude"]), axis=1)
 school_points = geopandas.GeoDataFrame(df, geometry="geometry")
@@ -73,7 +89,7 @@ result_counts.rename(columns = {'School Name / ID':'result_Counts'}, inplace = T
 print((result_counts))
 #display density
 accident_density_data = [go.Choroplethmapbox(geojson=counties, locations=accident_join_counts.school_dist, z=accident_join_counts.Accident_Counts,
-                                    colorscale="Viridis", zmin=0, zmax=11,
+                                    colorscale="Viridis", zmin=1000, zmax=16500,
                                     marker_opacity=0.5, marker_line_width=0)]
 accident_density_layout = go.Layout(mapbox = dict(
         style = "carto-positron",
@@ -85,15 +101,18 @@ accident_density = dict(data = accident_density_data,layout = accident_density_l
 
 df['id'] = df['Borough'].map(event_dictionary) 
 accidents['id']=accidents['BOROUGH'].map(accidents_id_dict)
-accident_counts = accidents.groupby('id').count()['COLLISION_ID']
+accident_counts = accidents.groupby('CONTRIBUTING FACTOR VEHICLE 1').count()['COLLISION_ID']
 accident_counts.to_frame()
 accident_counts = accident_counts.reset_index()
 accident_counts.rename(columns = {'COLLISION_ID':'Accident_Counts'}, inplace = True) 
 print(accident_counts)
+line_data = go.Figure([go.Scatter(x=accident_counts['CONTRIBUTING FACTOR VEHICLE 1'], y=accident_counts['Accident_Counts'])])
+line_fig = dict(data=line_data)
+from plotly.offline import plot
+
 locations_name = df['School Name / ID']
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
 data = [go.Scattermapbox(lat=df['Latitude'], lon=df['Longitude'], mode='markers', marker=dict(size=10),
 text=df['School Name / ID'])]
@@ -108,6 +127,21 @@ fig_layout = go.Layout(autosize=True, hovermode='closest', mapbox=dict(
     margin = dict(l=0, r=0, b=0, t=0))
 fig = dict(data=data, layout=fig_layout)
 
+
+acc_pt_data = [go.Scattermapbox(lat=accident_join['LATITUDE'], lon=accident_join['LONGITUDE'], mode='markers', marker=dict(size=10),
+text=accidents['COLLISION_ID'])]
+
+acc_fig_layout = go.Layout(autosize=True, hovermode='closest', mapbox=dict(
+        style= "carto-positron",
+        center= dict( lon= -74, lat= 40.75),
+        zoom= 9,
+        layers=[dict(
+            source = counties,
+            type = 'fill',below = 'traces', color =  'green', opacity = 0.5)]),
+    margin = dict(l=0, r=0, b=0, t=0))
+acc_fig = dict(data=acc_pt_data, layout=acc_fig_layout)
+
+
 Borough_URL = 'https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Borough%20Boundaries_geojson.JSON'
 with urlopen(Borough_URL) as response:
     boroughs = json.load(response)
@@ -121,56 +155,62 @@ counts.to_frame()
 counts = counts.reset_index()
 counts.rename(columns = {'School Name / ID':'counted'}, inplace = True) 
 print(counts)
-choro_map_data = [go.Choroplethmapbox(geojson=boroughs, locations=accident_counts.id, z=accident_counts.Accident_Counts,
-                                    colorscale="Viridis", zmin=1000, zmax=16500,
-                                    marker_opacity=0.5, marker_line_width=0)]
-choro_map_layout = go.Layout(mapbox = dict(
-        style = "carto-positron",
-        center = dict(lat= 40.75, lon= -74),
-        zoom=9),
-    margin = dict(l=0, r=0, b=0, t=0))
-choro_map = dict(data = choro_map_data,layout = choro_map_layout)
+options=[{'label': i, 'value': i} for i in available_indicators]
+print((options))
 
-app.layout = html.Div([
-    html.H1('Dash Tabs component demo'),
-    dcc.Tabs(id="tabs-example", value='tab-1-example', children=[
-        dcc.Tab(label='Safe Route Schools Map', value='tab-1-example'),
-        dcc.Tab(label='Distribution of Safe Route Schools By Borough', value='tab-2-example'),
-        dcc.Tab(label='Accident Density By Borough', value='tab-3-example')
-    ]),
-    html.Div(id='tabs-content-example')
-])
-
-
-@app.callback(Output('tabs-content-example', 'children'),
-              [Input('tabs-example', 'value')])
-def render_content(tab):
-    if tab == 'tab-1-example':
-        return html.Div([
-            html.H3('Tab content 1'),
-            dcc.Graph(id='map', figure=fig)
-            ])
-    elif tab == 'tab-2-example':
-        return html.Div([
-            html.H3('Count of Safe Route Schools By Borough'),
-            dcc.Graph(
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+app.layout =html.Div([
+    html.H1('Pedestrian Safety near New York City Schools'),
+    html.Div([dcc.Graph(id='map', figure=fig),dcc.Graph(
                 id='graph',
                 figure = {'data': [{
                         'x': ['Bronx', 'Brooklyn','Manhattan','Queens','Staten Island'],
                         'y': [25, 46, 23,33,8],
                         'type': 'bar'
                     }]
-                })
-        ])
-
-    elif tab == 'tab-3-example':
-        return html.Div([
-            html.H3('Accident Density By Borough'),
-            dcc.Graph(
+                }),            dcc.Graph(
                 id='Accident density',
-                figure = accident_density)
-        ])
+                figure = accident_density),
+            dcc.Dropdown(
+                id='available_idc',
+                options=[{'label': i, 'value': i} for i in available_indicators],
+                value = '11'
+                )
+    ,dcc.Graph(id='acc_map')
+    
+]) 
+])
 
 
+
+@app.callback (Output('acc_map', 'figure'),
+            [Input('available_idc', 'value')])
+
+def make_main_figure(indicator_selected):
+
+    dff = d[indicator_selected]
+    LAT_LIST = dff.LATITUDE.unique()
+    LAT_LIST.sort()
+    LON_LIST = dff.LONGITUDE.unique()
+    LON_LIST.sort()
+    center_lat = LAT_LIST[round(len(LAT_LIST)/2)]
+    center_lon = LON_LIST[round(len(LON_LIST)/2)]
+    acc_pt_data = [go.Scattermapbox(lat=dff['LATITUDE'], lon=dff['LONGITUDE'], mode='markers', marker=dict(size=10),
+text=dff['COLLISION_ID'])]
+    
+    acc_fig_layout = go.Layout(autosize=True, hovermode='closest', mapbox=dict(
+            style= "carto-positron",
+            center= dict(lon= center_lon, lat= center_lat),
+            zoom= 12.5,
+            layers=[dict(
+                source = counties,
+                type = 'fill',below = 'traces', color =  'green', opacity = 0.5)]),
+        margin = dict(l=0, r=0, b=0, t=0))
+    acc_fig = dict(data=acc_pt_data, layout=acc_fig_layout)
+
+    return acc_fig
+
+
+            
 if __name__ == '__main__':
     app.run_server(debug=False)
