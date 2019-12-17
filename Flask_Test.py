@@ -16,79 +16,103 @@ import json
 import geopandas
 import geopandas.tools
 from shapely.geometry import Point
+from plotly.offline import plot
 
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
-with urlopen('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json') as response:
-    counties = json.load(response)
+def find_lat(dff):
+    LAT_LIST = dff.LATITUDE.unique()
+    LAT_LIST.sort()
+    center_lat = LAT_LIST[round(len(LAT_LIST)/2)]
+    return(center_lat)
+def find_lon(dff):
+    LON_LIST = dff.LONGITUDE.unique()
+    LON_LIST.sort()
+    center_lon = LON_LIST[round(len(LON_LIST)/2)]   
+    return(center_lon) 
     
-    
-districts=geopandas.read_file('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json')
-counties_list = counties['features']
-print(counties_list)
-counties_list = [dict(item, **{'id':item['properties']['school_dist']}) for item in counties_list]
-counties['features']=counties_list    
+#LOAD DATA
+#LOAD AS GEOJSON TO MANIPULATE THE FEATURE ID
+with urlopen('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json') as distict_response:
+    school_districts_geojson = json.load(distict_response)
 Borough_URL = 'https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Borough%20Boundaries_geojson.JSON'
-with urlopen(Borough_URL) as response:
-    boroughs = json.load(response)
-print(boroughs)
-features_list = boroughs['features']
-features_list = [dict(item, **{'id':item['properties']['boro_code']}) for item in features_list]
-print(len(features_list))
-boroughs['features'] = features_list
-for item in features_list:
-    print(item['properties']['boro_code'],item['properties']['boro_name'])
-#get priority schools
+with urlopen(Borough_URL) as borough_response:
+    boroughs = json.load(borough_response)    
+#LOAD INTO GDF FOR SPATIAL JOINS    
+districts=geopandas.read_file('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/School%20Districts_GeoJason.json')
+
+#LOAD CSV DATA 
 df = pd.read_csv('https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Safe_Routes_to_Schools_-_Priority_Schools.csv')
 accidents = pd.read_csv("https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Accidents_ped.csv")
-print(accidents['CRASH DATE'])
+
+#GET ITEM FROM FEATURES TO ASSIGN AS ID
+school_districts_geojson_list = school_districts_geojson['features']
+school_districts_geojson_list = [dict(item, **{'id':item['properties']['school_dist']}) for item in school_districts_geojson_list]
+school_districts_geojson['features']=school_districts_geojson_list    
+
+boroughs_geojson_features_list = boroughs['features']
+boroughs_geojson_features_list = [dict(item, **{'id':item['properties']['boro_code']}) for item in boroughs_geojson_features_list]
+boroughs['features'] = boroughs_geojson_features_list
+
+#GET JUST YEAR
 accidents['CRASH YEAR']=accidents['CRASH DATE'].str[-4:]
-# Create the dictionary 
+# Create the dictionary to associate borough name and numeric identifier
 event_dictionary ={'Bronx' : '2', 'Staten Island' :'5', 'Brooklyn' : '3','Queens':'4','Manhattan':'1'} 
 accidents_id_dict ={'BRONX' : '2', 'STATEN ISLAND' :'5', 'BROOKLYN' : '3','QUEENS':'4','MANHATTAN':'1'} 
-#create geom for 
 
+#create geom for accidents from lat lot
+accidents['label']= accidents['CRASH YEAR']+" " +accidents['CONTRIBUTING FACTOR VEHICLE 1']
 accidents["geometry"] = accidents.apply(lambda row: Point(row["LONGITUDE"], row["LATITUDE"]), axis=1)
 accidents_points = geopandas.GeoDataFrame(accidents, geometry="geometry")
 #set CRS
 accidents_points.crs = districts.crs
 #find distict of school by spatial join
 accident_join = geopandas.tools.sjoin(accidents_points, districts, how="left")
-#get count of schools by district for density map
+#get count of accidents by district for density map
 accident_join_counts = accident_join.groupby('school_dist').count()['COLLISION_ID']
 accident_join_counts.to_frame()
 accident_join_counts = accident_join_counts.reset_index()
 accident_join_counts.rename(columns = {'COLLISION_ID':'Accident_Counts'}, inplace = True)
-print((accident_join_counts))
-acc_fig_layout = go.Layout(autosize=True, hovermode='closest', mapbox=dict(
-        style= "carto-positron",
-        center= dict( lon= -74, lat= 40.75),
-        zoom= 9,
-        layers=[dict(
-            source = counties,
-            type = 'fill',below = 'traces', color =  'green', opacity = 0.5)]),
-    margin = dict(l=0, r=0, b=0, t=0))
-available_indicators = accident_join_counts['school_dist'].unique()
-d = {indicator: accident_join[accident_join['school_dist']==indicator] for indicator in available_indicators}
-data_dict = {indicator: [go.Scattermapbox(lat=d[indicator]['LATITUDE'], lon=d[indicator]['LONGITUDE'], mode='markers', marker=dict(size=10),
-                                                        text=d[indicator]['COLLISION_ID'])] for indicator in available_indicators}
-fig_dict = {indicator: dict(data=data_dict[indicator], layout=acc_fig_layout) for indicator in available_indicators}
-figs=list(fig_dict.values())
-print(type(figs))
-#SCHOOL
+
+#CREATE GEOMETRY FOR SCHOOLS AND GDF
 df["geometry"] = df.apply(lambda row: Point(row["Longitude"], row["Latitude"]), axis=1)
 school_points = geopandas.GeoDataFrame(df, geometry="geometry")
 #set CRS
 school_points.crs = districts.crs
 #find distict of school by spatial join
-result = geopandas.tools.sjoin(school_points, districts, how="left")
+schools_with_dist = geopandas.tools.sjoin(school_points, districts, how="left")
 #get count of schools by district for density map
-result_counts = result.groupby('school_dist').count()['School Name / ID']
+result_counts = schools_with_dist.groupby('school_dist').count()['School Name / ID']
 result_counts.to_frame()
 result_counts = result_counts.reset_index()
 result_counts.rename(columns = {'School Name / ID':'result_Counts'}, inplace = True)
-print((result_counts))
-#display density
-accident_density_data = [go.Choroplethmapbox(geojson=counties, locations=accident_join_counts.school_dist, z=accident_join_counts.Accident_Counts,
+
+#PRE FILTER DATA BEFORE INITIALIZING APP, SAVE PROCESSING TIME BY NOT FILTER EACH SELECTION    
+available_indicators = accident_join_counts['school_dist'].unique()
+#CREATE DICTIONARY OF ALL DFS AFTER FILTER {id:DF}
+d = {indicator: accident_join[accident_join['school_dist']==indicator] for indicator in available_indicators}
+schools_dict = {indicator: schools_with_dist[schools_with_dist['school_dist']==indicator] for indicator in available_indicators}
+
+# DICTIONARY OF DATA FOR MAP LAYERS
+
+data_dict = {indicator: [go.Scattermapbox(lat=d[indicator]['LATITUDE'], lon=d[indicator]['LONGITUDE'],name = 'Accidents', mode='markers', marker=dict(size=10),
+                                                        text=d[indicator]['label']),go.Scattermapbox(lat=schools_dict[indicator]['Latitude'], lon=schools_dict[indicator]['Longitude'],name = 'Identified Schools', mode='markers', marker=dict(size=14,color='LightSkyBlue'),
+text=schools_dict[indicator]['School Name / ID'])] for indicator in available_indicators}
+layout_dict = {indicator:    go.Layout(autosize=True, hovermode='closest', mapbox=dict(
+            style= "carto-positron",
+            center= dict(lon= find_lon(d[indicator]), lat= find_lat(d[indicator])),
+            zoom= 12.5,
+            layers=[dict(
+                source = school_districts_geojson,
+                type = 'fill',below = 'traces', color =  'green', opacity = 0.5)]),
+        margin = dict(l=0, r=0, b=0, t=0)) for indicator in available_indicators}
+#CREATE DICTIONARY OF FIGURES FOR EACH LAYER
+   
+fig_dict = {indicator: dict(data=data_dict[indicator], layout=layout_dict[indicator]) for indicator in available_indicators}
+#CREATE LIST OF ALL FIGURES
+
+#display density for accidents by borough
+accident_density_data = [go.Choroplethmapbox(geojson=school_districts_geojson, locations=accident_join_counts.school_dist, z=accident_join_counts.Accident_Counts,
                                     colorscale="Viridis", zmin=1000, zmax=16500,
                                     marker_opacity=0.5, marker_line_width=0)]
 accident_density_layout = go.Layout(mapbox = dict(
@@ -99,20 +123,16 @@ accident_density_layout = go.Layout(mapbox = dict(
 accident_density = dict(data = accident_density_data,layout = accident_density_layout)
 
 
-df['id'] = df['Borough'].map(event_dictionary) 
-accidents['id']=accidents['BOROUGH'].map(accidents_id_dict)
-accident_counts = accidents.groupby('CONTRIBUTING FACTOR VEHICLE 1').count()['COLLISION_ID']
+
+accident_counts = accidents.groupby('CRASH YEAR').count()['COLLISION_ID']
 accident_counts.to_frame()
 accident_counts = accident_counts.reset_index()
 accident_counts.rename(columns = {'COLLISION_ID':'Accident_Counts'}, inplace = True) 
 print(accident_counts)
-line_data = go.Figure([go.Scatter(x=accident_counts['CONTRIBUTING FACTOR VEHICLE 1'], y=accident_counts['Accident_Counts'])])
+line_data = go.Figure([go.Scatter(x=accident_counts['CRASH YEAR'], y=accident_counts['Accident_Counts'])])
 line_fig = dict(data=line_data)
-from plotly.offline import plot
 
-locations_name = df['School Name / ID']
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-
+# SCHOOLS AND DISTRICTS 
 
 data = [go.Scattermapbox(lat=df['Latitude'], lon=df['Longitude'], mode='markers', marker=dict(size=10),
 text=df['School Name / ID'])]
@@ -122,95 +142,48 @@ fig_layout = go.Layout(autosize=True, hovermode='closest', mapbox=dict(
         center= dict( lon= -74, lat= 40.75),
         zoom= 9,
         layers=[dict(
-            source = counties,
+            source = school_districts_geojson,
             type = 'fill',below = 'traces', color =  'green', opacity = 0.5)]),
     margin = dict(l=0, r=0, b=0, t=0))
 fig = dict(data=data, layout=fig_layout)
 
 
-acc_pt_data = [go.Scattermapbox(lat=accident_join['LATITUDE'], lon=accident_join['LONGITUDE'], mode='markers', marker=dict(size=10),
-text=accidents['COLLISION_ID'])]
 
-acc_fig_layout = go.Layout(autosize=True, hovermode='closest', mapbox=dict(
-        style= "carto-positron",
-        center= dict( lon= -74, lat= 40.75),
-        zoom= 9,
-        layers=[dict(
-            source = counties,
-            type = 'fill',below = 'traces', color =  'green', opacity = 0.5)]),
-    margin = dict(l=0, r=0, b=0, t=0))
-acc_fig = dict(data=acc_pt_data, layout=acc_fig_layout)
-
-
-Borough_URL = 'https://raw.githubusercontent.com/aschwenker/Data-608-Final/master/Data/Borough%20Boundaries_geojson.JSON'
-with urlopen(Borough_URL) as response:
-    boroughs = json.load(response)
-features_list = boroughs['features']
-features_list = [dict(item, **{'id':item['properties']['boro_code']}) for item in features_list]
-boroughs['features'] = features_list
-df['id'] = df['Borough'].map(event_dictionary) 
-# Print the DataFrame 
-counts = df.groupby('id').count()['School Name / ID']
-counts.to_frame()
-counts = counts.reset_index()
-counts.rename(columns = {'School Name / ID':'counted'}, inplace = True) 
-print(counts)
-options=[{'label': i, 'value': i} for i in available_indicators]
-print((options))
-
+#INITIALIZE APP
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
-app.layout =html.Div([
-    html.H1('Pedestrian Safety near New York City Schools'),
-    html.Div([dcc.Graph(id='map', figure=fig),dcc.Graph(
+app.layout =html.Div([html.Div([
+    html.H1('Pedestrian Safety near New York City Schools')]),
+    html.Div([html.H2('In 2013 DOT analyzed citywide crash data and school data in order to identify a new group of 135 public, private and parochial elementary and middle schools Priority Schools. Each Priority Schools receives an individualized planning study which determines both short-term and long-term measures to improve safety.'),
+                      dcc.Graph(id='map', figure=fig)]),
+    html.Div([html.H2('Selected Schools Distribution By Borough'),
+              dcc.Graph(
                 id='graph',
                 figure = {'data': [{
                         'x': ['Bronx', 'Brooklyn','Manhattan','Queens','Staten Island'],
                         'y': [25, 46, 23,33,8],
                         'type': 'bar'
                     }]
-                }),            dcc.Graph(
-                id='Accident density',
+                })]),
+    html.Div([
+      html.H2('Accident Density By School District'),
+      html.Div([html.H2('Accident and Schools Filtered By School District'),
+                html.H3('Select Your School District Below'),
+                dcc.Graph(id='Accident density',
                 figure = accident_density),
             dcc.Dropdown(
                 id='available_idc',
                 options=[{'label': i, 'value': i} for i in available_indicators],
-                value = '11'
-                )
-    ,dcc.Graph(id='acc_map')
-    
-]) 
-])
-
-
+                value = '10'
+                ),
+                    dcc.Graph(id='acc_map')])
+            ])
+            ])
 
 @app.callback (Output('acc_map', 'figure'),
             [Input('available_idc', 'value')])
 
 def make_main_figure(indicator_selected):
-
-    dff = d[indicator_selected]
-    LAT_LIST = dff.LATITUDE.unique()
-    LAT_LIST.sort()
-    LON_LIST = dff.LONGITUDE.unique()
-    LON_LIST.sort()
-    center_lat = LAT_LIST[round(len(LAT_LIST)/2)]
-    center_lon = LON_LIST[round(len(LON_LIST)/2)]
-    acc_pt_data = [go.Scattermapbox(lat=dff['LATITUDE'], lon=dff['LONGITUDE'], mode='markers', marker=dict(size=10),
-text=dff['COLLISION_ID'])]
-    
-    acc_fig_layout = go.Layout(autosize=True, hovermode='closest', mapbox=dict(
-            style= "carto-positron",
-            center= dict(lon= center_lon, lat= center_lat),
-            zoom= 12.5,
-            layers=[dict(
-                source = counties,
-                type = 'fill',below = 'traces', color =  'green', opacity = 0.5)]),
-        margin = dict(l=0, r=0, b=0, t=0))
-    acc_fig = dict(data=acc_pt_data, layout=acc_fig_layout)
-
-    return acc_fig
-
-
-            
+    acc_fig = fig_dict[indicator_selected]
+    return acc_fig           
 if __name__ == '__main__':
     app.run_server(debug=False)
