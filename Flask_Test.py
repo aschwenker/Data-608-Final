@@ -16,7 +16,6 @@ import json
 import geopandas
 import geopandas.tools
 from shapely.geometry import Point
-from plotly.offline import plot
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -166,17 +165,17 @@ app.layout =html.Div([html.Div([
                 })]),
     html.Div([
       html.H2('Accident Density By School District'),
+      dcc.Graph(id='Accident density',
+                figure = accident_density)]),
       html.Div([html.H2('Accident and Schools Filtered By School District'),
                 html.H3('Select Your School District Below'),
-                dcc.Graph(id='Accident density',
-                figure = accident_density),
             dcc.Dropdown(
                 id='available_idc',
                 options=[{'label': i, 'value': i} for i in available_indicators],
                 value = '10'
                 ),
-                    dcc.Graph(id='acc_map')])
-            ])
+                    dcc.Graph(id='acc_map')
+                    ])
             ])
 
 @app.callback (Output('acc_map', 'figure'),
